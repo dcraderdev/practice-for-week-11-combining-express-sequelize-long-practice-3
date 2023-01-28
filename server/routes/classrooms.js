@@ -3,16 +3,17 @@ const express = require('express');
 const router = express.Router();
 
 // Import model(s)
-const { Classroom } = require('../db/models');
+const { Classroom, Supply, StudentClassroom, Student } = require('../db/models');
 const { Op } = require('sequelize');
 
 // List of classrooms
 router.get('/', async (req, res, next) => {
     let errorResult = { errors: [], count: 0, pageCount: 0 };
 
-    // Phase 6B: Classroom Search Filters
-    /*
+  // Phase 6B: Classroom Search Filters
+  /*
         name filter:
+        
             If the name query parameter exists, set the name query
                 filter to find a similar match to the name query parameter.
             For example, if name query parameter is 'Ms.', then the
@@ -34,49 +35,114 @@ router.get('/', async (req, res, next) => {
                     an error message of 'Student Limit should be a integer' to
                     errorResult.errors 
     */
-    const where = {};
+  const where = {};
 
-    // Your code here
+  // Your code here
+  if(req.query.name){
+    where.name = { [Op.like] : `%${req.query.name}%` }
+  }
 
-    const classrooms = await Classroom.findAll({
-        attributes: [ 'id', 'name', 'studentLimit' ],
-        where,
-        // Phase 1B: Order the Classroom search results
-    });
+  if(req.query.studentLimit){
+    let [num1, num2] = req.query.studentLimit.split(',')
+    if(!isNaN(num1) && !isNaN(num2) && num2 > num1) {
+        where.studentLimit = { [Op.between]: [num1, num2]}
+    }
+    if(!isNaN(num1) && num2 === undefined){
+        where.studentLimit = num1
+    }
+    if(isNaN(num1) && num2 === undefined){
+        errorResult.errors.push(["Student Limit should be an integer"])
+    }
+    else{
+        errorResult.errors.push(["Student Limit should be two numbers: min,max"])
+    }
+  }
 
-    res.json(classrooms);
+  const classrooms = await Classroom.findAll({
+    attributes: ['id', 'name', 'studentLimit'],
+    where,
+    order: ['name'],
+  });
+
+//   console.log(errorResult.errors.length);
+
+  if(errorResult.errors.length){
+    return res.status(400).json(errorResult)
+  }
+
+  res.json(classrooms);
 });
 
 // Single classroom
 router.get('/:id', async (req, res, next) => {
-    let classroom = await Classroom.findByPk(req.params.id, {
-        attributes: ['id', 'name', 'studentLimit'],
-        // Phase 7:
-            // Include classroom supplies and order supplies by category then
-                // name (both in ascending order)
-            // Include students of the classroom and order students by lastName
-                // then firstName (both in ascending order)
-                // (Optional): No need to include the StudentClassrooms
-        // Your code here
-    });
+  let errorResult = { errors: [], count: 0, pageCount: 0 };
 
-    if (!classroom) {
-        res.status(404);
-        res.send({ message: 'Classroom Not Found' });
-    }
-
-    // Phase 5: Supply and Student counts, Overloaded classroom
-        // Phase 5A: Find the number of supplies the classroom has and set it as
-            // a property of supplyCount on the response
-        // Phase 5B: Find the number of students in the classroom and set it as
-            // a property of studentCount on the response
-        // Phase 5C: Calculate if the classroom is overloaded by comparing the
-            // studentLimit of the classroom to the number of students in the
-            // classroom
-        // Optional Phase 5D: Calculate the average grade of the classroom 
+  let classroom = await Classroom.findByPk(req.params.id, {
+    attributes: ['id', 'name', 'studentLimit'],
+    // Phase 7:
+    // Include classroom supplies and order supplies by category then
+    // name (both in ascending order)
+    // Include students of the classroom and order students by lastName
+    // then firstName (both in ascending order)
+    // (Optional): No need to include the StudentClassrooms
     // Your code here
 
-    res.json(classroom);
+    include:[
+        {
+            model: Supply,
+            attributes: [`id`, `name`, `category`,`handed`],
+            order: [['category'],['name']]
+        },
+        {
+            model: Student,
+            attributes: [`id`, `firstName`,`lastName`,`leftHanded`],
+            order: [['lastName'],['firstName']],
+        }
+    ]
+
+  });
+
+  if (!classroom) {
+    res.status(404);
+    res.send({ message: 'Classroom Not Found' });
+  }
+
+  classroom = classroom.toJSON();
+
+  classroom.supplyCount = await Supply.count({
+    where: { classroomId: req.params.id },
+  });
+
+//   console.log(req.params.id == classroom.id );
+
+  classroom.studentCount = await StudentClassroom.count({
+    where: { classroomId: classroom.id },
+  });
+  classroom.overloaded =
+    classroom.studentCount > classroom.studentLimit ? true : false;
+
+  let totalGrade = await StudentClassroom.sum('grade', {
+    where: { classroomId: classroom.id },
+  });
+  classroom.avgGrade = totalGrade / classroom.studentCount;
+
+  // Phase 5: Supply and Student counts, Overloaded classroom
+  // Phase 5A: Find the number of supplies the classroom has and set it as
+  // a property of supplyCount on the response
+  // Phase 5B: Find the number of students in the classroom and set it as
+  // a property of studentCount on the response
+  // Phase 5C: Calculate if the classroom is overloaded by comparing the
+  // studentLimit of the classroom to the number of students in the
+  // classroom
+  // Optional Phase 5D: Calculate the average grade of the classroom
+
+  // Your code here
+
+  if(errorResult.errors.length){
+    res.status(400).json(errorResult)
+  }
+
+  res.json(classroom);
 });
 
 // Export class - DO NOT MODIFY

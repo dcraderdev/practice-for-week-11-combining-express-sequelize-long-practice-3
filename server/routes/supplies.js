@@ -3,11 +3,33 @@ const express = require('express');
 const router = express.Router();
 
 // Import model(s)
-const { Supply } = require('../db/models');
+const { Supply, Classroom } = require('../db/models');
+const { Op } = require('sequelize')
 
 // List of supplies by category
 router.get('/category/:categoryName', async (req, res, next) => {
-    // Phase 1C:
+
+    // // Phase 1C:
+    where = {}
+    
+    where.category = {[Op.like]: req.params.categoryName}
+    // where.category = { [Op.like]: req.params.categoryName }
+
+    const supplies = await Supply.findAll({
+        attributes: ['name'],
+        where,
+        include: {
+            model: Classroom,
+            attributes:[`id`, `name`]
+        },
+        order: [[Classroom,'name'],['name'], ['handed']]
+     })
+
+
+    if(!supplies)errorResult.error.push(['New Error'])
+    if(supplies)res.json(supplies)       
+        // where,
+        // order: [['name'], ['handed']]})
         // Find all supplies by category name
         // Order results by supply's name then handed
         // Return the found supplies as the response body
@@ -15,8 +37,31 @@ router.get('/category/:categoryName', async (req, res, next) => {
         // Include Classroom in the supplies query results
         // Order nested classroom results by name first then by supply name
     // Your code here
+
+    
+   
 });
 
+router.get('/category', async (req, res, next) => {
+    // Phase 1C:
+    const supplies = await Supply.findAll(req.params.id)
+
+        console.log(supplies);
+        if(!supplies){next({
+            status:error
+        })}
+        if(supplies)res.json(supplies)
+        // where,
+        // order: [['name'], ['handed']]})
+        // Find all supplies by category name
+        // Order results by supply's name then handed
+        // Return the found supplies as the response body
+    // Phase 8A:
+        // Include Classroom in the supplies query results
+        // Order nested classroom results by name first then by supply name
+    // Your code here
+
+});
 
 // Scissors Supply Calculation - Business Logic Goes Here!
 router.get('/scissors/calculate', async (req, res, next) => {
