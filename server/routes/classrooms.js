@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 // Import model(s)
-const { Classroom, Supply, StudentClassroom, Student } = require('../db/models');
+const { Classroom, Supply, StudentClassroom, Student, sequelize } = require('../db/models');
 const { Op } = require('sequelize');
 
 // List of classrooms
@@ -42,6 +42,10 @@ router.get('/', async (req, res, next) => {
     where.name = { [Op.like] : `%${req.query.name}%` }
   }
 
+
+
+
+
   if(req.query.studentLimit){
     let [num1, num2] = req.query.studentLimit.split(',')
     if(!isNaN(num1) && !isNaN(num2) && num2 > num1) {
@@ -59,16 +63,32 @@ router.get('/', async (req, res, next) => {
   }
 
   const classrooms = await Classroom.findAll({
-    attributes: ['id', 'name', 'studentLimit'],
+    attributes: [
+        'id',
+        'name',
+        'studentLimit',
+        'createdAt',
+        'updatedAt',
+        [sequelize.fn("AVG", sequelize.col('grade')),'avgGrade'],
+        [sequelize.fn("COUNT", sequelize.col('studentId')),'numStudents'],
+    ],
     where,
     order: ['name'],
+    include: {
+        model: StudentClassroom,
+        attributes: []
+    },
+    group: ['Classroom.id'],
   });
+
+
 
 //   console.log(errorResult.errors.length);
 
   if(errorResult.errors.length){
     return res.status(400).json(errorResult)
   }
+  console.log(classrooms);
 
   res.json(classrooms);
 });
@@ -97,6 +117,10 @@ router.get('/:id', async (req, res, next) => {
             model: Student,
             attributes: [`id`, `firstName`,`lastName`,`leftHanded`],
             order: [['lastName'],['firstName']],
+            include:{
+                model: StudentClassroom,
+                attributes:[]
+            }
         }
     ]
 
